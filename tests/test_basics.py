@@ -3,7 +3,7 @@ import pytest
 
 def test_config_loads():
     from irp.config import settings
-    assert settings.database_url == "postgresql+asyncpg://localhost:5432/irp"
+    assert settings.database_url == "postgresql+asyncpg://localhost:5432/divergent"
     assert settings.sync_interval_seconds == 300
 
 
