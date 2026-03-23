@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from irp.api.suppliers import router as suppliers_router
+from irp.api.contracts import router as contracts_router
 from irp.webhooks.handlers import router as webhooks_router
 
 app = FastAPI(title="Divergent API", version="4.0.0")
@@ -14,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(suppliers_router, prefix="/api/v1", tags=["suppliers"])
+app.include_router(contracts_router, prefix="/api/v1", tags=["contracts"])
 app.include_router(webhooks_router, prefix="/api/v1", tags=["webhooks"])
 
 
