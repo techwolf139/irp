@@ -59,7 +59,9 @@ class InventorySyncService:
         if not inventory:
             return False, "SKU不存在"
 
-        if inventory.available_qty < inventory.reorder_point:
-            return True, f"可用库存{inventory.available_qty} < 补货点{inventory.reorder_point}"
+        available_qty = inventory.available_qty  # type: ignore
+        reorder_point = inventory.reorder_point  # type: ignore
+        if available_qty < reorder_point:  # type: ignore
+            return True, f"可用库存{available_qty} < 补货点{reorder_point}"
 
         return False, "库存充足"

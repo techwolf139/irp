@@ -47,6 +47,8 @@ class ContractMaster(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    payment_plans = relationship("PaymentPlan", back_populates="contract", cascade="all, delete-orphan")
+
 
 class PaymentPlan(Base):
     __tablename__ = "payment_plan"
@@ -61,3 +63,6 @@ class PaymentPlan(Base):
     invoice_ids = Column(JSON, default=list)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系定义
+    contract = relationship("ContractMaster", back_populates="payment_plans")

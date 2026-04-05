@@ -36,6 +36,8 @@ class SupplierMaster(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    project_links = relationship("ProjectSupplierLink", back_populates="supplier", cascade="all, delete-orphan")
+
 
 class ProjectSupplierLink(Base):
     __tablename__ = "project_supplier_link"
@@ -47,3 +49,5 @@ class ProjectSupplierLink(Base):
     project_level_tags = Column(JSON, default=list)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    supplier = relationship("SupplierMaster", back_populates="project_links")

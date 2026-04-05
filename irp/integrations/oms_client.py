@@ -1,6 +1,7 @@
 import httpx
 from typing import List, Optional
 from pydantic import BaseModel
+from irp.core.retry import retry_async, RetryConfig
 
 
 class OMSInventory(BaseModel):
@@ -13,10 +14,12 @@ class OMSInventory(BaseModel):
 
 
 class OMSClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, retry_config: Optional[RetryConfig] = None):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.retry_config = retry_config or RetryConfig()
+        self.client = httpx.AsyncClient(timeout=self.retry_config.timeout)
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def get_inventory(self, sku_id: str) -> Optional[OMSInventory]:
         response = await self.client.get(f"{self.base_url}/api/inventory/{sku_id}")
         if response.status_code == 404:
@@ -26,7 +29,8 @@ class OMSClient:
         data["available_qty"] = data["sellable_qty"] - data["reserved_qty"]
         return OMSInventory(**data)
 
-    async def list_inventory(self, stock_status: str = None) -> List[OMSInventory]:
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
+    async def list_inventory(self, stock_status: Optional[str] = None) -> List[OMSInventory]:
         params = {}
         if stock_status:
             params["stock_status"] = stock_status

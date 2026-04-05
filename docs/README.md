@@ -2,6 +2,24 @@
 
 本文档收录 IRP 工作空间下三个核心系统的功能说明与技能清单。
 
+<p align="center">
+  <a href="./IRP-Technical-Whitepaper.md">📖 技术白皮书</a> •
+  <a href="./API.md">📡 API 文档</a> •
+  <a href="./plans/IRP-design.md">🏗️ 设计方案</a> •
+  <a href="./plans/IRP-implementation-plan.md">📋 实施计划</a>
+</p>
+
+---
+
+## 文档导航
+
+| 文档 | 说明 | 适用读者 |
+|------|------|----------|
+| [📖 IRP-Technical-Whitepaper.md](./IRP-Technical-Whitepaper.md) | 完整的技术架构白皮书 | 架构师、技术负责人 |
+| [📡 API.md](./API.md) | REST API 接口详细文档 | 前后端开发者 |
+| [🏗️ plans/IRP-design.md](./plans/IRP-design.md) | 系统设计方案 | 产品经理、架构师 |
+| [📋 plans/IRP-implementation-plan.md](./plans/IRP-implementation-plan.md) | 实施路线图 | 项目经理、开发者 |
+
 ---
 
 ## 系统索引

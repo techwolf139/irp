@@ -1,6 +1,7 @@
 import httpx
 from typing import List, Optional
 from pydantic import BaseModel
+from irp.core.retry import retry_async, RetryConfig
 
 
 class SRMSupplier(BaseModel):
@@ -34,11 +35,13 @@ class SRMContract(BaseModel):
 
 
 class SRMClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, retry_config: Optional[RetryConfig] = None):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.retry_config = retry_config or RetryConfig()
+        self.client = httpx.AsyncClient(timeout=self.retry_config.timeout)
 
-    async def get_suppliers(self, risk_level: str = None) -> List[SRMSupplier]:
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
+    async def get_suppliers(self, risk_level: Optional[str] = None) -> List[SRMSupplier]:
         params = {}
         if risk_level:
             params["risk_level"] = risk_level
@@ -46,11 +49,13 @@ class SRMClient:
         response.raise_for_status()
         return [SRMSupplier(**s) for s in response.json()]
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def get_supplier(self, supplier_id: str) -> SRMSupplier:
         response = await self.client.get(f"{self.base_url}/api/suppliers/{supplier_id}")
         response.raise_for_status()
         return SRMSupplier(**response.json())
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def create_purchase_requisition(self, items: List[dict]) -> str:
         response = await self.client.post(
             f"{self.base_url}/api/purchase-requisitions",
@@ -59,7 +64,8 @@ class SRMClient:
         response.raise_for_status()
         return response.json()["requisition_id"]
 
-    async def get_purchase_orders(self, supplier_id: str = None) -> List[SRMPurchaseOrder]:
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
+    async def get_purchase_orders(self, supplier_id: Optional[str] = None) -> List[SRMPurchaseOrder]:
         params = {}
         if supplier_id:
             params["supplier_id"] = supplier_id
@@ -67,11 +73,13 @@ class SRMClient:
         response.raise_for_status()
         return [SRMPurchaseOrder(**po) for po in response.json()]
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def get_contracts(self) -> List[SRMContract]:
         response = await self.client.get(f"{self.base_url}/api/contracts")
         response.raise_for_status()
         return [SRMContract(**c) for c in response.json()]
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def get_price_comparison(self, sku_id: str, qty: int) -> dict:
         response = await self.client.get(
             f"{self.base_url}/api/price-comparison",
@@ -80,6 +88,7 @@ class SRMClient:
         response.raise_for_status()
         return response.json()
 
+    @retry_async(max_retries=3, delay=1.0, backoff=2.0, exceptions=(httpx.HTTPError,))
     async def confirm_purchase_order(self, requisition_id: str) -> str:
         response = await self.client.post(
             f"{self.base_url}/api/purchase-orders/confirm",

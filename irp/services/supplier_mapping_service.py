@@ -12,8 +12,8 @@ class SupplierMappingService:
         self,
         project_id: str,
         supplier_id: str,
-        rating: float = None,
-        tags: List[str] = None
+        rating: Optional[float] = None,
+        tags: Optional[List[str]] = None
     ) -> ProjectSupplierLink:
         link = ProjectSupplierLink(
             project_id=project_id,

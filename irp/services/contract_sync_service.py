@@ -60,8 +60,8 @@ class ContractSyncService:
             )
             self.db.add(child)
 
-            if parent.child_contract_ids is None:
-                parent.child_contract_ids = []
-            parent.child_contract_ids.append(child.contract_id)
+            if parent.child_contract_ids is None:  # type: ignore
+                parent.child_contract_ids: list[str] = []  # type: ignore
+            parent.child_contract_ids.append(child.contract_id)  # type: ignore
 
             await self.db.commit()

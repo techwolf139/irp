@@ -20,21 +20,46 @@ class PriorityEscalation:
 
     @classmethod
     def evaluate(cls, task: TaskRequest, current_time: datetime) -> Optional[str]:
-        if task.status != "pending":
+        task_status: str = task.status or "pending"  # type: ignore
+        if str(task_status) != "pending":  # type: ignore
             return None
 
-        deadline = task.constraints.get("deadline") if task.constraints else None
-        time_until_deadline = (deadline - current_time).total_seconds() / 3600 if deadline else None
+        deadline = task.constraints.get("deadline") if task.constraints else None  # type: ignore
+        time_until_deadline = (deadline - current_time).total_seconds() / 3600 if deadline else None  # type: ignore
 
-        priority = task.priority
-
-        if priority == "P2" and time_until_deadline is not None and time_until_deadline < 2:
-            return "P1"
-
-        if priority == "P1" and time_until_deadline is not None and time_until_deadline < 0.5:
-            return "P0"
+        priority: str = task.priority or "P3"  # type: ignore
+        if str(priority) == "P2":  # type: ignore
+            if time_until_deadline is not None and time_until_deadline < 2:
+                return "P1"
+        elif str(priority) == "P1":  # type: ignore
+            if time_until_deadline is not None and time_until_deadline < 0.5:
+                return "P0"
 
         return None
+
+        priority = task.priority if isinstance(task.priority, str) else ""
+        if not priority or priority.startswith("Column"):
+            priority = getattr(task, '_priority', None) or ""
+
+        if priority == "P2" or "P2":
+            if priority == "P2":
+                return _check_deadline(task, current_time, 2, "P1")
+        elif priority == "P1":
+            return _check_deadline(task, current_time, 0.5, "P0")
+
+        return None
+
+
+def _check_deadline(task: TaskRequest, current_time: datetime, threshold_hours: float, target_priority: str) -> Optional[str]:
+    """Helper function to check deadline and return escalation priority.
+    用于检查任务截点时间并返回优先级提升建议。
+    """
+    deadline = task.constraints.get("deadline") if task.constraints and isinstance(task.constraints, dict) else None  # type: ignore
+    if deadline and isinstance(deadline, datetime):  # type: ignore
+        time_until_deadline = (deadline - current_time).total_seconds() / 3600  # type: ignore
+        if 0 < time_until_deadline < threshold_hours:  # type: ignore
+            return target_priority
+    return None
 
 
 class TaskScheduler:
@@ -47,20 +72,20 @@ class TaskScheduler:
         context = {"task": task_request.model_dump()}
         evaluation = self.rule_engine.evaluate(context)
 
-        if evaluation["blocked"]:
-            task_request.status = "blocked"
+        if evaluation.get("blocked", False):
+            task_request.status = "blocked"  # type: ignore
             await self.db.commit()
-            raise ValueError(f"任务被拦截: {evaluation['reason']}")
+            raise ValueError(f"任务被拦截：{evaluation.get('reason', 'Unknown')}")
 
-        if not task_request.priority:
-            task_request.priority = "P2"
+        if not task_request.priority:  # type: ignore
+            task_request.priority = "P2"  # type: ignore
 
-        task_request.status = "pending"
+        task_request.status = "pending"  # type: ignore
 
         self.db.add(task_request)
         await self.db.commit()
 
-        return task_request.task_id
+        return task_request.task_id or ""  # type: ignore
 
     async def process_pending_tasks(self):
         from sqlalchemy import select

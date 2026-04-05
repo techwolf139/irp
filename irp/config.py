@@ -9,9 +9,10 @@ class Settings(BaseSettings):
     srm_api_url: str = "http://localhost:8003"
     sync_interval_seconds: int = 300
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8"
+    }
 
 
 settings = Settings()

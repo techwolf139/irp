@@ -1,41 +1,91 @@
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import Column
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 from irp.core.database import get_db
 from irp.models.contract import ContractMaster, PaymentPlan
 from irp.services.contract_approval_service import ContractApprovalFlow, ContractType
 
 
+def _extract_value(value):
+    """从任何类型（包括 SQLAlchemy Column）提取实际值"""
+    if isinstance(value, Column):
+        return None
+    return value
+
+
 class ContractResponse(BaseModel):
     contract_id: str
     title: str
-    type: Optional[str]
+    type: Optional[str] = None
     status: str
-    supplier_id: Optional[str]
-    project_id: Optional[str]
-    total_amount: float
-    currency: str
-    signed_date: Optional[date]
-    start_date: Optional[date]
-    end_date: Optional[date]
+    supplier_id: Optional[str] = None
+    project_id: Optional[str] = None
+    total_amount: float = 0.0
+    currency: str = "CNY"
+    signed_date: Optional[date] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_model(cls, model) -> 'ContractResponse':
+        """从 SQLAlchemy 模型创建响应"""
+        return cls(
+            contract_id=model.contract_id or "",
+            title=model.title or "",
+            type=model.type,
+            status=model.status,
+            supplier_id=model.supplier_id,
+            project_id=model.project_id,
+            total_amount=float(model.total_amount or 0),
+            currency=model.currency or "CNY",
+            signed_date=model.signed_date,
+            start_date=model.start_date,
+            end_date=model.end_date
+        )
 
 
 class ContractDetailResponse(ContractResponse):
-    contract_no: Optional[str]
-    source_system: str
-    source_id: str
-    tax_rate: float
-    payment_terms: Optional[str]
-    delivery_terms: Optional[str]
-    penalty_clause: Optional[str]
-    child_contract_ids: List[str]
-    parent_contract_id: Optional[str]
+    contract_no: Optional[str] = None
+    source_system: str = ""
+    source_id: str = ""
+    tax_rate: float = 0.0
+    payment_terms: Optional[str] = None
+    delivery_terms: Optional[str] = None
+    penalty_clause: Optional[str] = None
+    child_contract_ids: List[str] = []
+    parent_contract_id: Optional[str] = None
+
+    @classmethod
+    def from_model(cls, model) -> 'ContractDetailResponse':
+        """从 SQLAlchemy 模型创建详细响应"""
+        return cls(
+            contract_id=model.contract_id or "",
+            title=model.title or "",
+            type=model.type,
+            status=model.status,
+            supplier_id=model.supplier_id,
+            project_id=model.project_id,
+            total_amount=float(model.total_amount or 0),
+            currency=model.currency or "CNY",
+            signed_date=model.signed_date,
+            start_date=model.start_date,
+            end_date=model.end_date,
+            contract_no=model.contract_no,
+            source_system=model.source_system or "",
+            source_id=model.source_id or "",
+            tax_rate=float(model.tax_rate or 0.13),
+            payment_terms=model.payment_terms,
+            delivery_terms=model.delivery_terms,
+            penalty_clause=model.penalty_clause,
+            child_contract_ids=list(model.child_contract_ids or []),
+            parent_contract_id=model.parent_contract_id
+        )
 
 
 class ContractStatsResponse(BaseModel):
@@ -70,54 +120,18 @@ async def list_contracts(
 
     result = await db.execute(query)
     contracts = result.scalars().all()
-    return [
-        ContractResponse(
-            contract_id=c.contract_id,
-            title=c.title,
-            type=c.type,
-            status=c.status,
-            supplier_id=c.supplier_id,
-            project_id=c.project_id,
-            total_amount=c.total_amount or 0,
-            currency=c.currency or "CNY",
-            signed_date=c.signed_date,
-            start_date=c.start_date,
-            end_date=c.end_date
+    return [ContractResponse.from_model(c) for c in contracts]
+
+
+    @router.get("/contracts/{contract_id}", response_model=ContractDetailResponse)
+    async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+        result = await db.execute(
+            select(ContractMaster).where(ContractMaster.contract_id == contract_id)
         )
-        for c in contracts
-    ]
-
-
-@router.get("/contracts/{contract_id}", response_model=ContractDetailResponse)
-async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(ContractMaster).where(ContractMaster.contract_id == contract_id)
-    )
-    contract = result.scalar_one_or_none()
-    if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
-    return ContractDetailResponse(
-        contract_id=contract.contract_id,
-        title=contract.title,
-        type=contract.type,
-        status=contract.status,
-        supplier_id=contract.supplier_id,
-        project_id=contract.project_id,
-        total_amount=contract.total_amount or 0,
-        currency=contract.currency or "CNY",
-        signed_date=contract.signed_date,
-        start_date=contract.start_date,
-        end_date=contract.end_date,
-        contract_no=contract.contract_no,
-        source_system=contract.source_system,
-        source_id=contract.source_id,
-        tax_rate=contract.tax_rate or 0.13,
-        payment_terms=contract.payment_terms,
-        delivery_terms=contract.delivery_terms,
-        penalty_clause=contract.penalty_clause,
-        child_contract_ids=contract.child_contract_ids or [],
-        parent_contract_id=contract.parent_contract_id
-    )
+        contract = result.scalar_one_or_none()
+        if not contract:
+            raise HTTPException(status_code=404, detail="Contract not found")
+        return ContractDetailResponse.from_model(contract)
 
 
 @router.get("/contracts/stats", response_model=ContractStatsResponse)
@@ -174,3 +188,109 @@ async def create_approval_flow(
 
     record = ContractApprovalFlow.create_approval_record(contract_id, ctype)
     return ApprovalRecordResponse(**record)
+
+
+class ContractCreateRequest(BaseModel):
+    contract_id: str
+    title: str
+    type: Optional[str] = None
+    supplier_id: Optional[str] = None
+    project_id: Optional[str] = None
+    total_amount: float = 0
+    currency: str = "CNY"
+    signed_date: Optional[date] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    contract_no: Optional[str] = None
+    tax_rate: float = 0.13
+    payment_terms: Optional[str] = None
+    delivery_terms: Optional[str] = None
+    penalty_clause: Optional[str] = None
+
+
+class ContractUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+    total_amount: Optional[float] = None
+    signed_date: Optional[date] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    payment_terms: Optional[str] = None
+    delivery_terms: Optional[str] = None
+    penalty_clause: Optional[str] = None
+
+
+@router.post("/contracts", response_model=ContractResponse)
+async def create_contract(
+    request: ContractCreateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    existing = await db.execute(
+        select(ContractMaster).where(ContractMaster.contract_id == request.contract_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Contract ID already exists")
+
+    contract = ContractMaster(
+        contract_id=request.contract_id,
+        source_system="IRP",
+        source_id=request.contract_id,
+        contract_no=request.contract_no,
+        title=request.title,
+        type=request.type,
+        status="草稿",
+        supplier_id=request.supplier_id,
+        project_id=request.project_id,
+        total_amount=request.total_amount,
+        currency=request.currency,
+        tax_rate=request.tax_rate,
+        signed_date=request.signed_date,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        payment_terms=request.payment_terms,
+        delivery_terms=request.delivery_terms,
+        penalty_clause=request.penalty_clause
+    )
+    db.add(contract)
+    await db.commit()
+    await db.refresh(contract)
+
+    return ContractResponse.from_model(contract)
+
+
+@router.put("/contracts/{contract_id}", response_model=ContractResponse)
+async def update_contract(
+    contract_id: str,
+    request: ContractUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(ContractMaster).where(ContractMaster.contract_id == contract_id)
+    )
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    update_data = request.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(contract, field, value)
+    contract.updated_at = datetime.utcnow()  # type: ignore
+    await db.commit()
+    await db.refresh(contract)
+
+    return ContractResponse.from_model(contract)
+
+
+@router.delete("/contracts/{contract_id}")
+async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ContractMaster).where(ContractMaster.contract_id == contract_id)
+    )
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    await db.delete(contract)
+    await db.commit()
+
+    return {"message": "Contract deleted successfully"}
