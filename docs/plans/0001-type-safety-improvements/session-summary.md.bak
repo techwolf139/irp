@@ -1,0 +1,226 @@
+# IRP 类型安全性改进 - 当前Session总结
+
+**日期**: 2026-04-05  
+**实施者**: Sisyphus  
+**当前版本**: 0.4.0
+
+---
+
+## 📊 最新进度统计
+
+### 开始统计
+- 初始错误数: **123**
+- 当前错误数: **41**
+- 已修复: **82 个错误 (67%)**
+
+### Phase 完成状态
+
+| Phase | 文件 | 初始 errors | 当前 errors | 状态 |
+|-------|------|-------------|-------------|----|
+| **Phase 1** | database.py | 2 | 0 | ✅ Complete |
+| **Phase 1** | retry.py | 7 | 7 | 🔄 进行中 |
+| **Phase 2** | pms_client.py | 1 | 0 | ✅ Complete |
+| **Phase 2** | oms_client.py | 2 | 0 | ✅ Complete |
+| **Phase 2** | srm_client.py | 6 | 0 | ✅ Complete |
+| **Phase 3** | contracts.py | 50 | 1 | 🔄 进行中 |
+| **Phase 3** | suppliers.py | 30 | 1 | 🔄 进行中 |
+| **Phase 4** | task_scheduler.py | 8 | 8 | 🔄 进行中 |
+| **Phase 4** | supplier_sync_service.py | 6 | 6 | ⏸️ 待开始 |
+| **Phase 4** | inventory_sync_service.py | 3 | 3 | ⏸️ 待开始 |
+| **Phase 4** | contract_sync_service.py | 3 | 3 | ⏸️ 待开始 |
+| **Phase 4** | replenishment_service.py | 8 | 8 | ⏸️ 待开始 |
+| **Phase 4** | supplier_mapping_service.py | 2 | 2 | ⏸️ 待开始 |
+
+---
+
+## ✅ 本次 Session 完成的工作
+
+### 1. contracts.py - 98% 完成
+**修复**: 为 `ContractResponse` 和 `ContractDetailResponse` 添加了 factory methods
+- ✅ `ContractResponse.from_model()` method
+- ✅ `ContractDetailResponse.from_model()` method  
+- ✅ 更新所有 endpoint 使用 factory methods
+- 剩余问题: 1 个 `updated_at` 类型错误
+
+**影响**: 减少了 ~50 个错误
+
+### 2. suppliers.py - 97% 完成
+**修复**: 为 `SupplierResponse` 添加了 factory method
+- ✅ `SupplierResponse.from_model()` method
+- ✅ 更新所有 endpoint 使用 factory methods
+- 剩余问题: 1 个 `updated_at` 类型错误
+
+**影响**: 减少了 ~30 个错误
+
+### 3. task_scheduler.py
+**分析**: 需要深入理解 ORM 模型操作模式
+
+当前问题:
+- Column comparisons in conditionals
+- ORM attribute assignment errors
+
+---
+
+## 🎯 关键技术突破
+
+### 1. 工厂方法模式成功
+对于 ORM 到 Pydantic 的转换，工厂方法模式非常有效：
+
+```python
+@classmethod
+def from_model(cls, model) -> 'MyResponse':
+    return cls(
+        field1=model.field1 or "",
+        field2=float(model.field2 or 0),
+        # ...
+    )
+```
+
+**优势**:
+- 明确转换逻辑
+- 类型安全检查友好
+- 易于维护和测试
+
+### 2. Pydantic v2 与 SQLAlchemy ORM
+**发现**:
+- `from_attributes=True` 不足以满足类型检查器
+- 必须创建显式 factory methods
+- Pyright 无法推断 ORM Column 类型
+
+### 3. Column 比较问题
+**问题**: `if column == value:` 是查询表达式，不是 boolean
+**修复**: 需要先查询实例，然后比较实例属性
+
+---
+
+## ❌ 剩余挑战
+
+### 1. retry.py 装饰器类型问题 (7 errors)
+这是最棘手的问题，原因：
+- 装饰器返回类型签名复杂
+- `functools.wraps` 可能影响推断
+- 协程包装器与返回类型不匹配
+
+### 2. SQLAlchemy Column 与 Pydantic
+**现象**: Pyright 无法正确推断 ORM 模型属性类型
+- `Column[str]` vs `str`
+- `Column[int]` vs `int`
+- `Column[date]` vs `date`
+
+**方案**: 继续使用 factory method 模式
+
+### 3. 属性赋值问题
+**现象**: 
+```python
+instance.updated_at = datetime.utcnow()  # TypeError
+```
+
+**原因**: Pyright 认为 `updated_at` 是 Column 而非 datetime
+
+**临时方案**: 使用 `# type: ignore` 注释
+
+---
+
+## 📈 下一步计划
+
+### 短期 (接下来1-2小时)
+1. ✅ 完成 task_scheduler.py 修复
+2. ✅ 应用相同模式到 service 层文件
+3. ✅ 临时解决 updated_at 问题
+
+### 中期 (接下来2-4小时)
+1. ✅ 完成所有 remaining service 文件
+2. ✅ 解决 retry.py 问题
+3. ✅ 运行完整测试套件
+
+### 中期 (1天)
+1. ✅ 验证所有修复正确性
+2. ✅ 运行测试
+3. ✅ 更新文档
+
+---
+
+## 📝 技术决策记录
+
+### Factory Method 模式 - 继续坚持
+**决策**: 为所有 ORM 到 Pydantic 转换使用 factory methods  
+**理由**: 
+- 静态类型检查友好
+- 转换逻辑清晰
+- 易于测试维护
+
+### 是否使用类型忽略 - 谨慎使用
+**原则**: 仅在确认为 SQLAlchemy 推断错误时使用  
+**示例**:
+```python
+instance.updated_at = datetime.utcnow()  # type: ignore
+```
+
+### 是否重写装饰器 - 暂缓
+**目前**: 保持自定义装饰器，使用临时 type hints  
+**替代**: 考虑迁移到 `tenacity` 库
+
+---
+
+## 💡 经验教训
+
+### Pydantic v2 + SQLAlchemy ORM
+1. **从 attributes=True 开始**但不够
+2. **必须工厂方法**进行显式转换
+3. **使用 or ""**和**or 0** 提供默认值
+
+### ORM 属性操作
+1. **查询实例后赋值**，不是直接赋值到模型
+2. **避免在 if 中使用 Column**,使用查询结果
+3. **Column 比较**是查询表达式，需要 `.where()` 或实例比较
+
+### 装饰器签名
+1. **明确声明返回类型**
+2. **使用 TypeVar** 维护类型关系
+3. **functools.wraps**可能影响推断
+
+---
+
+## 📋 文件修改清单
+
+### 已修改文件
+1. ✅ `irp/core/database.py` - AsyncSession 上下文管理器
+2. ✅ `irp/core/retry.py` - 部分修复
+3. ✅ `irp/integrations/pms_client.py` - RetryConfig 修复
+4. ✅ `irp/integrations/oms_client.py` - RetryConfig 修复
+5. ✅ `irp/integrations/srm_client.py` - RetryConfig 修复
+6. ✅ `irp/api/contracts.py` - Factory methods 添加
+7. ✅ `irp/api/suppliers.py` - Factory methods 添加
+
+### 待修改文件
+1. ⏸️ `irp/services/task_scheduler.py` - 进行中
+2. ⏸️ `irp/services/supplier_sync_service.py` - 待开始
+3. ⏸️ `irp/services/inventory_sync_service.py` - 待开始
+4. ⏸️ `irp/services/contract_sync_service.py` - 待开始
+5. ⏸️ `irp/services/replenishment_service.py` - 待开始
+6. ⏸️ `irp/services/supplier_mapping_service.py` - 待开始
+
+---
+
+## 🔚 结论
+
+**当前状态**: 完成 67% (82/123 errors fixed)
+
+**主要进展**:
+- ✅ API 层几乎完成 (contracts, suppliers)
+- ✅ 集成客户端完成
+- ✅ Core 基础设施部分完成
+- 🔄 Service 层进行中
+
+**下一步**: 
+1. 继续 service 层修复
+2. 完成 task_scheduler.py
+3. 解决 retry.py 装饰器问题
+4. 运行完整测试验证
+
+**预计完成时间**: 2-3 小时即可达到 >90% 修复率
+
+---
+
+*更新*: 2026-04-05~12:00  
+*版本*: 0.4.0
